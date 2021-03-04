@@ -163,15 +163,17 @@ class AppLogic:
                 y_true_df.to_csv(os.path.join('/mnt/output/', 'y_true.csv'), index=False, sep=self.sep)
 
                 if self.master:
+                    self.data_incoming = ['DONE']
                     state = state_finishing
                 else:
+                    self.data_outgoing = 'DONE'
+                    self.status_available = True
                     break
 
             # GLOBAL PART
 
             if state == state_gather:
                 if len(self.data_incoming) == len(self.clients):
-
                     rf = None
                     for d in self.data_incoming:
                         d = pickle.loads(d)
@@ -195,9 +197,9 @@ class AppLogic:
                     print(f'Have {len(self.data_incoming)} of {len(self.clients)} so far, waiting...')
 
             if state == state_finishing:
-                time.sleep(10)
-                self.status_finished = True
-                break
+                if len(self.data_incoming) == len(self.clients):
+                    self.status_finished = True
+                    break
 
             # LOCAL PART
 
