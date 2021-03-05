@@ -148,19 +148,19 @@ class AppLogic:
             if state == state_global_ready:
                 print(f'Forest done')
 
+                y_pred = self.rf.predict(self.data_X_test)
+
+                y_pred_df = pd.DataFrame(data={'pred': y_pred[:]})
+                y_pred_df.to_csv(os.path.join('/mnt/output/', 'y_pred.csv'), index=False, sep=self.sep)
+
                 if self.mode == 'classification':
                     y_proba = self.rf.predict_proba(self.data_X_test)
 
                     y_proba_df = pd.DataFrame(data={'prob_0': y_proba[:, 0], 'prob_1': y_proba[:, 1]})
                     y_proba_df.to_csv(os.path.join('/mnt/output/', 'y_proba.csv'), index=False, sep=self.sep)
-                elif self.mode == 'regression':
-                    y_pred = self.rf.predict(self.data_X_test)
-
-                    y_pred_df = pd.DataFrame(data={'pred': y_pred[:]})
-                    y_pred_df.to_csv(os.path.join('/mnt/output/', 'y_pred.csv'), index=False, sep=self.sep)
 
                 y_true_df = pd.DataFrame(data={'y_true': self.data_y_test})
-                y_true_df.to_csv(os.path.join('/mnt/output/', 'y_true.csv'), index=False, sep=self.sep)
+                y_true_df.to_csv(os.path.join('/mnt/output/', 'y_test.csv'), index=False, sep=self.sep)
 
                 if self.master:
                     self.data_incoming = ['DONE']
