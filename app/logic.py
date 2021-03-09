@@ -55,6 +55,7 @@ class AppLogic:
 
         self.estimators = None
         self.mode = None
+        self.random_state = None
 
         self.data_X_train = []
         self.data_y_train = []
@@ -113,6 +114,7 @@ class AppLogic:
 
             self.estimators = config.get('estimators', 100)
             self.mode = config.get('mode', 'classification')
+            self.random_state = config.get('random_state')
 
     def app_flow(self):
         # This method contains a state machine for the slave and master instance
@@ -185,9 +187,9 @@ class AppLogic:
                 for i in range(len(self.data_X_train)):
                     global_rf = None
                     if self.mode == 'classification':
-                        global_rf = RandomForestClassifier(n_estimators=self.estimators)
+                        global_rf = RandomForestClassifier(n_estimators=self.estimators, random_state=self.random_state)
                     elif self.mode == 'regression':
-                        global_rf = RandomForestRegressor(n_estimators=self.estimators)
+                        global_rf = RandomForestRegressor(n_estimators=self.estimators, random_state=self.random_state)
                     global_rf.fit(self.data_X_train[i], self.data_y_train[i])
                     rfs.append({
                         'rf': global_rf,
