@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 import threading
 import time
 import yaml
@@ -122,11 +123,12 @@ class AppLogic:
         # === States ===
         state_initializing = 1
         state_read_input = 2
-        state_train_local = 2
-        state_gather = 3
-        state_wait = 4
-        state_global_ready = 5
-        state_finishing = 6
+        state_share_samples = 2
+        state_train_local = 3
+        state_gather = 4
+        state_wait = 5
+        state_global_ready = 6
+        state_finishing = 7
 
         # Initial state
         state = state_initializing
@@ -150,32 +152,32 @@ class AppLogic:
                     data_y = d[self.label]
 
                     if ins.split_test is not None:
-                        self.data = pd.read_csv(os.path.join(base_dir, self.input_train), sep=self.sep)
-                        data_X_train, data_X_test, data_y_train, data_y_test = train_test_split(data_X, data_y, test_size=self.split_test)
-                        self.data_X_train.append(data_X_train)
-                        self.data_y_train.append(data_y_train)
-                        self.data_X_test.append(data_X_test)
-                        self.data_y_test.append(data_y_test)
+                        ins.data = pd.read_csv(os.path.join(base_dir, ins.input_train), sep=ins.sep)
+                        data_X_train, data_X_test, data_y_train, data_y_test = train_test_split(data_X, data_y, test_size=ins.split_test)
+                        ins.data_X_train.append(data_X_train)
+                        ins.data_y_train.append(data_y_train)
+                        ins.data_X_test.append(data_X_test)
+                        ins.data_y_test.append(data_y_test)
                     else:
-                        self.data_X_train.append(data_X)
-                        self.data_y_train.append(data_y)
+                        ins.data_X_train.append(data_X)
+                        ins.data_y_train.append(data_y)
 
-                def read_input_test(path):
-                    d = pd.read_csv(path, sep=self.sep)
-                    data_X = d.drop(self.label, axis=1)
-                    data_y = d[self.label]
-                    self.data_X_test.append(data_X)
-                    self.data_y_test.append(data_y)
+                def read_input_test(ins, path):
+                    d = pd.read_csv(path, sep=ins.sep)
+                    data_X = d.drop(ins.label, axis=1)
+                    data_y = d[ins.label]
+                    ins.data_X_test.append(data_X)
+                    ins.data_y_test.append(data_y)
 
                 if self.split_mode == 'directory':
                     for split_name in os.listdir(base_dir):
                         read_input_train(self, os.path.join(base_dir, split_name, self.input_train))
                         if self.input_test is not None:
-                            read_input_test(os.path.join(base_dir, split_name, self.input_test))
+                            read_input_test(self, os.path.join(base_dir, split_name, self.input_test))
                 elif self.split_mode == 'file':
                     read_input_train(self, os.path.join(base_dir, self.input_train))
                     if self.input_test is not None:
-                        read_input_test(os.path.join(base_dir, self.input_test))
+                        read_input_test(self, os.path.join(base_dir, self.input_test))
 
                 print('Read input.')
                 state = state_train_local
@@ -193,6 +195,7 @@ class AppLogic:
                     global_rf.fit(self.data_X_train[i], self.data_y_train[i])
                     rfs.append({
                         'rf': global_rf,
+                        'samples': self.data_y_train[i].shape[0],
                     })
 
                 print(f'Trained random forests')
@@ -258,14 +261,23 @@ class AppLogic:
                     for i in range(len(self.data_X_train)):
                         global_rf = None
 
+                        total_samples = 0
+                        for d in client_data:
+                            total_samples += d[i]['samples']
+
                         for d in client_data:
                             drf = d[i]['rf']
 
+                            perc = d[i]['samples'] / total_samples
+                            trees = int(perc * self.estimators)
+
                             if global_rf is None:
                                 global_rf = drf
+                                global_rf.estimators_ = random.sample(drf.estimators_, trees)
+                                global_rf.n_estimators = trees
                             else:
-                                global_rf.estimators_ += drf.estimators_
-                                global_rf.n_estimators += drf.n_estimators
+                                global_rf.estimators_ += random.sample(drf.estimators_, trees)
+                                global_rf.n_estimators += trees
 
                         data_outgoing.append(global_rf)
 
