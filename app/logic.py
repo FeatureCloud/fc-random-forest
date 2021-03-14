@@ -54,7 +54,10 @@ class AppLogic:
         self.sep = None
         self.label = None
 
-        self.estimators = None
+        self.my_samples = None
+        self.total_samples = None
+
+        self.estimators_total = None
         self.mode = None
         self.random_state = None
 
@@ -113,7 +116,7 @@ class AppLogic:
             self.sep = config['format']['sep']
             self.label = config['format']['label']
 
-            self.estimators = config.get('estimators', 100)
+            self.estimators_total = config.get('estimators', 100)
             self.mode = config.get('mode', 'classification')
             self.random_state = config.get('random_state')
 
@@ -123,12 +126,14 @@ class AppLogic:
         # === States ===
         state_initializing = 1
         state_read_input = 2
-        state_share_samples = 2
-        state_train_local = 3
-        state_gather = 4
-        state_wait = 5
-        state_global_ready = 6
-        state_finishing = 7
+        state_share_samples = 3
+        state_gather_1 = 4
+        state_wait_1 = 5
+        state_train_local = 6
+        state_gather_2 = 7
+        state_wait_2 = 8
+        state_global_ready = 9
+        state_finishing = 10
 
         # Initial state
         state = state_initializing
@@ -179,8 +184,22 @@ class AppLogic:
                     if self.input_test is not None:
                         read_input_test(self, os.path.join(base_dir, self.input_test))
 
-                print('Read input.')
-                state = state_train_local
+                split_samples = [i.shape[0] for i in self.data_y_train]
+                self.my_samples = sum(split_samples) // len(split_samples)
+
+                print(f'Read input. Have {split_samples} samples.')
+
+                if self.master:
+                    self.data_incoming.append(pickle.dumps({
+                        'samples': self.my_samples
+                    }))
+                    state = state_gather_1
+                else:
+                    self.data_outgoing = pickle.dumps({
+                        'samples': self.my_samples
+                    })
+                    self.status_available = True
+                    state = state_wait_1
 
             if state == state_train_local:
                 print('Calculate local values...')
@@ -188,25 +207,25 @@ class AppLogic:
                 rfs = []
                 for i in range(len(self.data_X_train)):
                     global_rf = None
+                    trees = int(self.estimators_total * self.my_samples / self.total_samples)
                     if self.mode == 'classification':
-                        global_rf = RandomForestClassifier(n_estimators=self.estimators, random_state=self.random_state)
+                        global_rf = RandomForestClassifier(n_estimators=trees, random_state=self.random_state)
                     elif self.mode == 'regression':
-                        global_rf = RandomForestRegressor(n_estimators=self.estimators, random_state=self.random_state)
+                        global_rf = RandomForestRegressor(n_estimators=trees, random_state=self.random_state)
                     global_rf.fit(self.data_X_train[i], self.data_y_train[i])
                     rfs.append({
                         'rf': global_rf,
-                        'samples': self.data_y_train[i].shape[0],
                     })
 
                 print(f'Trained random forests')
 
                 if self.master:
                     self.data_incoming.append(pickle.dumps(rfs))
-                    state = state_gather
+                    state = state_gather_2
                 else:
                     self.data_outgoing = pickle.dumps(rfs)
                     self.status_available = True
-                    state = state_wait
+                    state = state_wait_2
 
             if state == state_global_ready:
                 print(f'Forest done')
@@ -249,35 +268,59 @@ class AppLogic:
 
             # GLOBAL PART
 
-            if state == state_gather:
+            if state == state_gather_1:
                 if len(self.data_incoming) == len(self.clients):
 
                     client_data = []
                     for local_rfs in self.data_incoming:
                         client_data.append(pickle.loads(local_rfs))
 
+                    self.data_incoming = []
+
+                    total_samples = sum([cd['samples'] for cd in client_data])
+
+                    self.total_samples = total_samples
+
+                    self.data_outgoing = pickle.dumps(total_samples)
+                    self.status_available = True
+                    state = state_train_local
+
+                else:
+                    print(f'Have {len(self.data_incoming)} of {len(self.clients)} so far, waiting...')
+
+            if state == state_gather_2:
+                if len(self.data_incoming) == len(self.clients):
+
+                    client_data = []
+                    for local_rfs in self.data_incoming:
+                        client_data.append(pickle.loads(local_rfs))
+
+                    self.data_incoming = []
+
                     data_outgoing = []
 
                     for i in range(len(self.data_X_train)):
                         global_rf = None
 
-                        total_samples = 0
-                        for d in client_data:
-                            total_samples += d[i]['samples']
+                        # total_samples = 0
+                        # for d in client_data:
+                        #     total_samples += d[i]['samples']
 
                         for d in client_data:
                             drf = d[i]['rf']
 
-                            perc = d[i]['samples'] / total_samples
-                            trees = int(perc * self.estimators)
+                            # perc = d[i]['samples'] / total_samples
+                            # trees = int(perc * self.estimators_total)
 
                             if global_rf is None:
                                 global_rf = drf
-                                global_rf.estimators_ = random.sample(drf.estimators_, trees)
-                                global_rf.n_estimators = trees
+                                global_rf.estimators_ = drf.estimators_
+                                # global_rf.estimators_ = random.sample(drf.estimators_, trees)
+                                global_rf.n_estimators = drf.n_estimators
                             else:
-                                global_rf.estimators_ += random.sample(drf.estimators_, trees)
-                                global_rf.n_estimators += trees
+                                global_rf.estimators_ += drf.estimators_
+                                # global_rf.estimators_ += random.sample(drf.estimators_, trees)
+                                global_rf.n_estimators += drf.n_estimators
 
                         data_outgoing.append(global_rf)
 
@@ -297,9 +340,18 @@ class AppLogic:
 
             # LOCAL PART
 
-            if state == state_wait:
+            if state == state_wait_1:
+                if len(self.data_incoming) > 0:
+                    self.total_samples = pickle.loads(self.data_incoming[0])
+                    self.data_incoming = []
+
+                    state = state_train_local
+
+            if state == state_wait_2:
                 if len(self.data_incoming) > 0:
                     self.rfs = pickle.loads(self.data_incoming[0])
+                    self.data_incoming = []
+
                     state = state_global_ready
 
             time.sleep(1)
