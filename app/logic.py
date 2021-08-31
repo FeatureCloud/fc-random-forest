@@ -259,7 +259,7 @@ class AppLogic:
                     write_output(os.path.join(base_dir_out, self.output_test), {'y_true': results_test[0]})
 
                 if self.master:
-                    self.data_incoming = ['DONE']
+                    self.data_incoming.append('DONE')
                     state = state_finishing
                 else:
                     self.data_outgoing = 'DONE'

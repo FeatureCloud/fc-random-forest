@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build . --tag registry.featurecloud.eu:5000/basic_rf
+docker build . --tag featurecloud.ai/basic_rf
