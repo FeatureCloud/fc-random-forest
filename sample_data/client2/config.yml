@@ -1,0 +1,17 @@
+fc_random_forest:
+  input:
+    train: "data.csv"
+    test: "data.csv"
+  output:
+    pred: "pred.csv"
+    proba: "proba.csv"
+    test: "test.csv"
+  format:
+    sep: ","
+    label: "10"
+  split:
+    mode: file # directory if cross validation was used before, else file
+    dir: . # data if cross validation app was used before, else .
+  estimators: 100 # number of trees in the forest
+  mode: classification # classification or regression
+  random_state: 42 # random state for reproducibility
