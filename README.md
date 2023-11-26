@@ -40,4 +40,10 @@ fc_random_forest:
   estimators: 100 # number of trees in the forest
   mode: classification # classification or regression
   random_state: 42 # random state for reproducibility
+  max_depth: # maximum depth of the tree
+  min_samples_split: 2 # minimum number of samples required to split an internal node
+  min_samples_leaf: 1 # minimum number of samples required to be at a leaf node
+  max_features: "sqrt" # number of features to consider when looking for the best split
+  bootstrap: True # whether bootstrap samples are used when building trees
+  max_samples: # number of samples to draw from X to train each base estimator
 ```

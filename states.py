@@ -1,8 +1,5 @@
 import os
 import pickle
-import random
-import threading
-import time
 import yaml
 
 import pandas as pd
@@ -80,7 +77,6 @@ class ReadInputState(AppState):
                 data_y = d[self.load('label')]
 
                 if self.load('split_test') is not None:
-                    data = pd.read_csv(os.path.join(base_dir, ins.input_train), sep=self.load('sep'))
                     return train_test_split(data_X, data_y, test_size=self.load('split_test'))
                    
                 else:
@@ -177,8 +173,15 @@ class ReadInputState(AppState):
             self.store('estimators_total', config.get('estimators', 100))
             self.store('mode', config.get('mode', 'classification'))
             self.store('random_state', config.get('random_state'))
-            
-            
+            self.store('max_depth', config.get('max_depth', None))
+            self.store('min_samples_split', config.get('min_samples_split', 2))
+            self.store('min_samples_leaf', config.get('min_samples_leaf', 1))
+            self.store('max_features', config.get('max_features', 'sqrt'))
+            self.store('bootstrap', config.get('bootstrap', True))
+            self.store('max_samples', config.get('max_samples', None))
+
+
+
 @app_state('train local', Role.BOTH)
 class TrainLocalState(AppState):
     """
@@ -199,9 +202,15 @@ class TrainLocalState(AppState):
                 global_rf = None
                 trees = int(self.load('estimators_total') * self.load('my_samples') / self.load('total_samples'))
                 if self.load('mode') == 'classification':
-                    global_rf = RandomForestClassifier(n_estimators=trees, random_state=self.load('random_state'))
+                    global_rf = RandomForestClassifier(n_estimators=trees, random_state=self.load('random_state'),
+                                                       max_depth=self.load('max_depth'), min_samples_split=self.load('min_samples_split'),
+                                                       min_samples_leaf=self.load('min_samples_leaf'), max_features=self.load('max_features'),
+                                                       bootstrap=self.load('bootstrap'), max_samples=self.load('max_samples'))
                 elif self.load('mode') == 'regression':
-                    global_rf = RandomForestRegressor(n_estimators=trees, random_state=self.load('random_state'))
+                    global_rf = RandomForestRegressor(n_estimators=trees, random_state=self.load('random_state'),
+                                                       max_depth=self.load('max_depth'), min_samples_split=self.load('min_samples_split'),
+                                                       min_samples_leaf=self.load('min_samples_leaf'), max_features=self.load('max_features'),
+                                                       bootstrap=self.load('bootstrap'), max_samples=self.load('max_samples'))
                 global_rf.fit(self.load('data_X_train')[i], self.load('data_y_train')[i])
                 rfs.append({'rf': global_rf,})
 
